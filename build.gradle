@@ -5,6 +5,7 @@ plugins {
     id 'application'
     id 'signing'
     id 'maven-publish'
+    id "com.vanniktech.maven.publish" version "0.34.0"
 }
 
 group = 'com.matchory.packages'
@@ -29,8 +30,6 @@ repositories {
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
-    withJavadocJar()
-    withSourcesJar()
 }
 
 sourceSets.main.java.srcDirs = ["src/main/java"]
@@ -112,8 +111,8 @@ tasks.processResources {
     def buildArch = System.getProperty("os.arch").toLowerCase()
     def isCrossCompiling = (currentOs != buildOs) || (currentArch != buildArch)
 
-    if (!isCrossCompiling && file("${buildDir}/libs/jpostal/shared").exists()) {
-        from("${buildDir}/libs/jpostal/shared") {
+    if (!isCrossCompiling && file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
+        from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
             include '*.so', '*.dylib', '*.dll'
             into("native")
             rename { filename ->
@@ -193,8 +192,8 @@ jar {
     def buildOsFolder = buildOs.contains("mac") ? "macos" : "linux"
     def buildArchFolder = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
 
-    if (file("${buildDir}/libs/jpostal/shared").exists()) {
-        from("${buildDir}/libs/jpostal/shared") {
+    if (file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
+        from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
             include '*.so', '*.dylib', '*.dll'
             into("native/${buildOsFolder}/${buildArchFolder}")
             rename { filename ->
@@ -223,7 +222,7 @@ jar {
 }
 
 application {
-    applicationDefaultJvmArgs = ["-Djava.library.path=" + file("${buildDir}/libs/jpostal/shared").absolutePath]
+    applicationDefaultJvmArgs = ["-Djava.library.path=" + file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").absolutePath]
 }
 
 dependencies {
@@ -231,81 +230,55 @@ dependencies {
 }
 
 tasks.withType(Test).configureEach {
-    systemProperty "java.library.path", file("${buildDir}/libs/jpostal/shared").absolutePath
+    systemProperty "java.library.path", file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").absolutePath
 }
 
-artifacts {
-    archives javadocJar, sourcesJar
-}
+mavenPublishing {
+    coordinates("com.matchory.packages", "jpostal", getProperty("version").toString().replaceFirst("^v", ""))
+    publishToMavenCentral()
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            groupId = 'com.matchory.packages'
-            artifactId = 'jpostal'
-            version = '1.0.0'
-
-            from components.java
-
-            versionMapping {
-                usage('java-api') {
-                    fromResolutionOf('runtimeClasspath')
-                }
-                usage('java-runtime') {
-                    fromResolutionResult()
-                }
-            }
-
-            pom {
-                name = 'jpostal'
-                description = 'Java/JNI bindings to libpostal for fast international street address parsing/normalization'
-                url = 'https://github.com/matchory/jpostal'
-                developers {
-                    developer {
-                        id = 'openvenues'
-                        name = 'Open Venues'
-                        url = 'https://github.com/openvenues'
-                    }
-                    developer {
-                        id = 'matchory'
-                        name = 'Matchory GmbH'
-                        url = 'https://github.com/matchory'
-                    }
-                }
-                licenses {
-                    license {
-                        name = 'MIT'
-                    }
-                }
-                scm {
-                    connection = 'scm:git:git://github.com/matchory/libpostal.git'
-                    developerConnection = 'scm:git:ssh://github.com/matchory/libpostal.git'
-                    url = 'https://github.com/matchory/libpostal'
-                }
-            }
-        }
+    // Configure signing - try in-memory first, fall back to file-based
+    if (project.hasProperty("signingInMemoryKey") || project.hasProperty("signing.keyId")) {
+        signAllPublications()
     }
 
-    repositories {
-        maven {
-            name = 'com.matchory.packages.jpostal'
-            url = layout.buildDirectory.dir("repo")
-        }
-        maven {
-            name = "GitHubPackages"
-            url = "https://maven.pkg.github.com/matchory/jpostal"
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
+    pom {
+        name = 'jpostal'
+        description = 'Java/JNI bindings to libpostal for fast international street address parsing/normalization'
+        url = 'https://github.com/matchory/jpostal'
+        developers {
+            developer {
+                id = 'openvenues'
+                name = 'Open Venues'
+                url = 'https://github.com/openvenues'
             }
+            developer {
+                id = 'matchory'
+                name = 'Matchory GmbH'
+                url = 'https://github.com/matchory'
+            }
+        }
+        licenses {
+            license {
+                name = 'MIT'
+            }
+        }
+        scm {
+            connection = 'scm:git:git://github.com/matchory/libpostal.git'
+            developerConnection = 'scm:git:ssh://github.com/matchory/libpostal.git'
+            url = 'https://github.com/matchory/libpostal'
         }
     }
 }
 
-signing {
-    sign configurations.archives
-    sign publishing.publications.mavenJava
-}
+//signing {
+//    required {
+//        gradle.taskGraph.hasTask("publish") &&
+//                (project.hasProperty("signing.keyId") || System.getenv("GPG_PRIVATE_KEY") != null)
+//    }
+//    sign configurations.archives
+//    sign publishing.publications.mavenJava
+//}
 
 javadoc {
     if (JavaVersion.current().isJava9Compatible()) {
