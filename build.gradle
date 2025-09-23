@@ -83,16 +83,38 @@ model {
                     def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
                     def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
 
-                    // Configure cross-compilation if needed
-                    if (System.getenv("CROSS_COMPILE") == "true") {
-                        println "Cross-compilation detected for Linux ARM64"
-                        // Use cross-compiler tools
-                        if (System.getenv("CC")) {
-                            cCompiler.executable = System.getenv("CC")
+                    // Debug: Print compiler and library information
+                    println "Linux build debug info:"
+                    println "  TARGET_ARCH: ${System.getenv("TARGET_ARCH")}"
+                    println "  CC: ${System.getenv("CC")}"
+                    println "  Architecture folder: ${archFolder}"
+                    println "  Library path: ${libPath}"
+                    println "  Library exists: ${file(libPath).exists()}"
+
+                    if (file(libPath).exists()) {
+                        def libFiles = file(libPath).listFiles()
+                        println "  Library files: ${libFiles}"
+                        libFiles?.each { f ->
+                            if (f.name.endsWith('.so')) {
+                                try {
+                                    def fileOutput = "file ${f.absolutePath}".execute().text
+                                    println "  ${f.name}: ${fileOutput.trim()}"
+                                } catch (Exception e) {
+                                    println "  ${f.name}: Could not determine file type"
+                                }
+                            }
                         }
-                        // Add cross-compilation flags
-                        cCompiler.args '-march=armv8-a'
-                        linker.args '-march=armv8-a'
+                    }
+
+                    // Configure cross-compilation toolchain if environment variables are set
+                    if (System.getenv("CC")) {
+                        cCompiler.executable = System.getenv("CC")
+                        println "Using cross-compiler: ${System.getenv("CC")}"
+
+                        // Also configure the linker to use the cross-compilation toolchain
+                        // For GCC cross-compilation, the linker should be the same as the compiler
+                        linker.executable = System.getenv("CC")
+                        println "Using compiler as linker: ${System.getenv("CC")}"
                     }
 
                     linker.args '-L', "${projectDir}/libs/libpostal/linux/${archFolder}"
@@ -129,9 +151,9 @@ tasks.processResources {
     def actualTargetArch = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
     def actualBuildArch = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
 
-    // Force cross-compilation for ARM64 Linux builds to use pre-built bindings
-    def isCrossCompiling = (actualTargetOs != actualBuildOs) || (actualTargetArch != actualBuildArch) ||
-                          (System.getenv("SKIP_JNI_BUILD") == "true")
+    // Only consider it cross-compilation if actually targeting different OS
+    // Architecture differences on same OS can be handled by cross-compilation toolchain
+    def isCrossCompiling = (actualTargetOs != actualBuildOs)
 
     if (!isCrossCompiling && file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
         from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {

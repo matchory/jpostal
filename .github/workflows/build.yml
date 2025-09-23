@@ -50,11 +50,19 @@ jobs:
         run: |
           echo "TARGET_OS=linux" >> $GITHUB_ENV
           echo "TARGET_ARCH=aarch64" >> $GITHUB_ENV
-          echo "SKIP_JNI_BUILD=true" >> $GITHUB_ENV
 
-          # Set up QEMU for ARM64 emulation as fallback
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
+          # Configure cross-compilation toolchain
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "AR=aarch64-linux-gnu-ar" >> $GITHUB_ENV
+          echo "LD=aarch64-linux-gnu-ld" >> $GITHUB_ENV
+          echo "STRIP=aarch64-linux-gnu-strip" >> $GITHUB_ENV
+
+          # Test the cross-compiler
+          aarch64-linux-gnu-gcc --version
+          echo "Cross-compiler test:"
+          echo 'int main() { return 0; }' | aarch64-linux-gnu-gcc -x c - -o /tmp/test-arm64
+          file /tmp/test-arm64
 
       - name: Set platform environment variables
         # language=bash
