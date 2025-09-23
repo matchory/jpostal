@@ -80,10 +80,10 @@ model {
                     cCompiler.args '-I', "${jvmHome}/include/linux"
                     cCompiler.args '-D_FILE_OFFSET_BITS=64'
 
-                    // Determine architecture for library path
-                    def arch = targetPlatform.architecture.name
-                    if (arch == "arm64") arch = "aarch64"
-                    linker.args '-L', "${projectDir}/libs/libpostal/linux/${arch}"
+                    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
+                    def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+
+                    linker.args '-L', "${projectDir}/libs/libpostal/linux/${archFolder}"
                 } else if (targetPlatform.operatingSystem.windows) {
                     cCompiler.args "-I${jvmHome}/include/win32"
                 } else if (targetPlatform.operatingSystem.freeBSD) {
@@ -109,7 +109,15 @@ tasks.processResources {
     // Check if we're cross-compiling (target platform differs from build platform)
     def buildOs = System.getProperty("os.name").toLowerCase()
     def buildArch = System.getProperty("os.arch").toLowerCase()
-    def isCrossCompiling = (currentOs != buildOs) || (currentArch != buildArch)
+
+    // In CI, environment variables are used for JAR naming, not actual cross-compilation
+    // Only consider it cross-compilation if explicitly building for a different platform
+    def actualTargetOs = currentOs.contains("mac") ? "macos" : "linux"
+    def actualBuildOs = buildOs.contains("mac") ? "macos" : "linux"
+    def actualTargetArch = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+    def actualBuildArch = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
+
+    def isCrossCompiling = (actualTargetOs != actualBuildOs) || (actualTargetArch != actualBuildArch)
 
     if (!isCrossCompiling && file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
         from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
