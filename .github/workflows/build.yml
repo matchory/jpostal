@@ -29,9 +29,10 @@ jobs:
 
       - name: Install build tools (Linux)
         if: startsWith(matrix.os, 'ubuntu')
+        # language=bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.build-tools }}
+          sudo apt-get install --yes --no-install-recommends ${{ matrix.build-tools }}
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -45,6 +46,7 @@ jobs:
 
       - name: Set up cross-compilation (Linux ARM64)
         if: matrix.platform == 'linux-aarch64'
+        # language=bash
         run: |
           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
@@ -52,6 +54,7 @@ jobs:
           echo "TARGET_ARCH=aarch64" >> $GITHUB_ENV
 
       - name: Set platform environment variables
+        # language=bash
         run: |
           case "${{ matrix.platform }}" in
             linux-x86_64)
@@ -65,7 +68,14 @@ jobs:
           esac
 
       - name: Build jpostal
-        run: ./gradlew -Pversion=${{ github.event.release.tag_name }} clean build platformJar -x test
+        # language=bash
+        run: |
+          ./gradlew \
+            -Pversion=${{ github.event.release.tag_name }} \
+            clean \
+            build \
+            platformJar \
+            -x test
 
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
@@ -103,11 +113,13 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: List downloaded artifacts
+        # language=bash
         run: |
           echo "Downloaded artifacts:"
           find artifacts -name "*.jar" -type f
 
       - name: Build for publishing
+        # language=bash
         run: ./gradlew clean build -x test
 
       - name: Publish to Maven Central
@@ -117,9 +129,11 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ vars.SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSPHRASE }}
+        # language=bash
         run: ./gradlew publish
 
       - name: Prepare release artifacts
+        # language=bash
         run: |
           mkdir -p release-artifacts
           cp build/libs/*.jar release-artifacts/
