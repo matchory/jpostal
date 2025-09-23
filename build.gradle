@@ -83,6 +83,18 @@ model {
                     def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
                     def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
 
+                    // Configure cross-compilation if needed
+                    if (System.getenv("CROSS_COMPILE") == "true") {
+                        println "Cross-compilation detected for Linux ARM64"
+                        // Use cross-compiler tools
+                        if (System.getenv("CC")) {
+                            cCompiler.executable = System.getenv("CC")
+                        }
+                        // Add cross-compilation flags
+                        cCompiler.args '-march=armv8-a'
+                        linker.args '-march=armv8-a'
+                    }
+
                     linker.args '-L', "${projectDir}/libs/libpostal/linux/${archFolder}"
                 } else if (targetPlatform.operatingSystem.windows) {
                     cCompiler.args "-I${jvmHome}/include/win32"
@@ -117,7 +129,9 @@ tasks.processResources {
     def actualTargetArch = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
     def actualBuildArch = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
 
-    def isCrossCompiling = (actualTargetOs != actualBuildOs) || (actualTargetArch != actualBuildArch)
+    // Force cross-compilation for ARM64 Linux builds to use pre-built bindings
+    def isCrossCompiling = (actualTargetOs != actualBuildOs) || (actualTargetArch != actualBuildArch) ||
+                          (System.getenv("SKIP_JNI_BUILD") == "true")
 
     if (!isCrossCompiling && file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
         from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {

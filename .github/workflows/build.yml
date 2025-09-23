@@ -48,10 +48,13 @@ jobs:
         if: matrix.platform == 'linux-aarch64'
         # language=bash
         run: |
-          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "TARGET_OS=linux" >> $GITHUB_ENV
           echo "TARGET_ARCH=aarch64" >> $GITHUB_ENV
+          echo "SKIP_JNI_BUILD=true" >> $GITHUB_ENV
+
+          # Set up QEMU for ARM64 emulation as fallback
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
 
       - name: Set platform environment variables
         # language=bash
