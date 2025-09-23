@@ -1,23 +1,48 @@
-import org.gradle.internal.jvm.Jvm
-
 plugins {
     id 'c'
     id 'java'
+    id 'java-library'
     id 'application'
+    id 'signing'
+    id 'maven-publish'
+}
+
+group = 'com.matchory.packages'
+version = getProperty("version").toString().replaceFirst("^v", "") ?: '0.0.0'
+
+// Create a function to detect platform for consumers
+ext.detectPlatform = {
+    def os = System.getProperty("os.name").toLowerCase()
+    def arch = System.getProperty("os.arch").toLowerCase()
+
+    def osName = os.contains("mac") ? "macos" : "linux"
+    def archName = arch.contains("aarch64") || arch.contains("arm") ? "aarch64" : "x86_64"
+
+    return "${osName}-${archName}"
 }
 
 repositories {
     mavenCentral()
 }
 
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withJavadocJar()
+    withSourcesJar()
+}
+
 sourceSets.main.java.srcDirs = ["src/main/java"]
 sourceSets.test.java.srcDirs = ["src/test/java"]
 
-sourceCompatibility = JavaVersion.VERSION_16
-targetCompatibility = JavaVersion.VERSION_16
 
 model {
     platforms {
+        linux_x86_64 {
+            architecture "x86_64"
+            operatingSystem "linux"
+        }
         linux_aarch64 {
             architecture "arm64"
             operatingSystem "linux"
@@ -32,12 +57,15 @@ model {
         jpostal(NativeLibrarySpec) {
             binaries.all {
                 def jvmHome = org.gradle.internal.jvm.Jvm.current().javaHome
+
                 if (targetPlatform.operatingSystem.macOsX) {
                     cCompiler.args '-I', "${jvmHome}/include"
                     cCompiler.args '-I', "${jvmHome}/include/darwin"
+                    cCompiler.args '-I', "${projectDir}/libs/libpostal/include"
                     cCompiler.args '-mmacosx-version-min=10.9'
                     linker.args '-mmacosx-version-min=10.9'
                     linker.args '-stdlib=libc++'
+                    linker.args '-L', "${projectDir}/libs/libpostal/macos/aarch64"
                 } else if (targetPlatform.operatingSystem.linux) {
                     cCompiler.args '-I', "${jvmHome}/include"
                     cCompiler.args '-I', "${jvmHome}/include/linux"
@@ -55,18 +83,219 @@ model {
     }
 }
 
+tasks.processResources {
+    dependsOn 'jpostalSharedLibrary'
+
+    // Detect current platform (allow override via environment variables for CI)
+    def currentOs = System.getenv("TARGET_OS") ?: System.getProperty("os.name").toLowerCase()
+    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
+
+    def osFolder = currentOs.contains("mac") ? "macos" : "linux"
+    def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+
+    // Include JNI bindings built by Gradle (simplified path structure)
+    // Check if we're cross-compiling (target platform differs from build platform)
+    def buildOs = System.getProperty("os.name").toLowerCase()
+    def buildArch = System.getProperty("os.arch").toLowerCase()
+    def isCrossCompiling = (currentOs != buildOs) || (currentArch != buildArch)
+
+    if (!isCrossCompiling && file("${buildDir}/libs/jpostal/shared").exists()) {
+        from("${buildDir}/libs/jpostal/shared") {
+            include '*.so', '*.dylib', '*.dll'
+            into("native")
+            rename { filename ->
+                if (filename.startsWith("libjpostal")) {
+                    return System.mapLibraryName("jpostal")
+                }
+                return filename
+            }
+        }
+    } else if (isCrossCompiling) {
+        // For cross-compilation, we need pre-built JNI bindings
+        // This would require pre-built JNI libraries for each target platform
+        logger.warn("Cross-compiling detected. JNI bindings must be pre-built for target platform: ${osFolder}-${archFolder}")
+
+        // Look for pre-built JNI bindings in a specific directory
+        def prebuiltJniPath = "${projectDir}/libs/jni/${osFolder}/${archFolder}"
+        if (file(prebuiltJniPath).exists()) {
+            from(prebuiltJniPath) {
+                include '*.so', '*.dylib', '*.dll'
+                into("native")
+            }
+        }
+    }
+
+    // Include pre-built libpostal native library for current platform only
+    from("${projectDir}/libs/libpostal/${osFolder}/${archFolder}") {
+        include '*.so', '*.dylib'
+        into("native")
+    }
+}
+
+
 classes.dependsOn 'jpostalSharedLibrary'
 
+// Ensure JAR includes native libraries
+// Create platform-specific JAR (for CI builds)
+tasks.register('platformJar', Jar) {
+    dependsOn processResources
+    duplicatesStrategy = DuplicatesStrategy.WARN
+    from sourceSets.main.output
+
+    // Add platform classifier to JAR name (allow override via environment variables for CI)
+    def currentOs = System.getenv("TARGET_OS") ?: System.getProperty("os.name").toLowerCase()
+    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
+
+    def osName = currentOs.contains("mac") ? "macos" : "linux"
+    def archName = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+
+    archiveClassifier = "${osName}-${archName}"
+}
+
+// Create universal JAR with all platforms (default for users)
+jar {
+    dependsOn 'jpostalSharedLibrary'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
+
+    // Include all pre-built native libraries with platform-specific paths
+    from("${projectDir}/libs/libpostal/linux/x86_64") {
+        include '*.so'
+        into("native/linux/x86_64")
+    }
+
+    from("${projectDir}/libs/libpostal/linux/aarch64") {
+        include '*.so'
+        into("native/linux/aarch64")
+    }
+
+    from("${projectDir}/libs/libpostal/macos/aarch64") {
+        include '*.dylib'
+        into("native/macos/aarch64")
+    }
+
+    // Include JNI bindings for current platform (will be built on each platform in CI)
+    def buildOs = System.getProperty("os.name").toLowerCase()
+    def buildArch = System.getProperty("os.arch").toLowerCase()
+    def buildOsFolder = buildOs.contains("mac") ? "macos" : "linux"
+    def buildArchFolder = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
+
+    if (file("${buildDir}/libs/jpostal/shared").exists()) {
+        from("${buildDir}/libs/jpostal/shared") {
+            include '*.so', '*.dylib', '*.dll'
+            into("native/${buildOsFolder}/${buildArchFolder}")
+            rename { filename ->
+                if (filename.startsWith("libjpostal")) {
+                    return System.mapLibraryName("jpostal")
+                }
+                return filename
+            }
+        }
+    }
+
+    // Also include any pre-built JNI bindings from libs/jni/
+    fileTree("${projectDir}/libs/jni").visit { FileVisitDetails details ->
+        if (!details.isDirectory() && (details.name.endsWith('.so') || details.name.endsWith('.dylib'))) {
+            def pathParts = details.relativePath.segments
+            if (pathParts.length >= 3) { // e.g., ["linux", "x86_64", "libjpostal.so"]
+                def targetOs = pathParts[0]
+                def targetArch = pathParts[1]
+                from(details.file.parent) {
+                    include details.name
+                    into("native/${targetOs}/${targetArch}")
+                }
+            }
+        }
+    }
+}
 
 application {
     applicationDefaultJvmArgs = ["-Djava.library.path=" + file("${buildDir}/libs/jpostal/shared").absolutePath]
 }
 
-
 dependencies {
     testImplementation 'junit:junit:4.+'
 }
 
-tasks.withType(Test) {
+tasks.withType(Test).configureEach {
     systemProperty "java.library.path", file("${buildDir}/libs/jpostal/shared").absolutePath
+}
+
+artifacts {
+    archives javadocJar, sourcesJar
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = 'com.matchory.packages'
+            artifactId = 'jpostal'
+            version = '1.0.0'
+
+            from components.java
+
+            versionMapping {
+                usage('java-api') {
+                    fromResolutionOf('runtimeClasspath')
+                }
+                usage('java-runtime') {
+                    fromResolutionResult()
+                }
+            }
+
+            pom {
+                name = 'jpostal'
+                description = 'Java/JNI bindings to libpostal for fast international street address parsing/normalization'
+                url = 'https://github.com/matchory/jpostal'
+                developers {
+                    developer {
+                        id = 'openvenues'
+                        name = 'Open Venues'
+                        url = 'https://github.com/openvenues'
+                    }
+                    developer {
+                        id = 'matchory'
+                        name = 'Matchory GmbH'
+                        url = 'https://github.com/matchory'
+                    }
+                }
+                licenses {
+                    license {
+                        name = 'MIT'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/matchory/libpostal.git'
+                    developerConnection = 'scm:git:ssh://github.com/matchory/libpostal.git'
+                    url = 'https://github.com/matchory/libpostal'
+                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name = 'com.matchory.packages.jpostal'
+            url = layout.buildDirectory.dir("repo")
+        }
+        maven {
+            name = "GitHubPackages"
+            url = "https://maven.pkg.github.com/matchory/jpostal"
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+}
+
+signing {
+    sign configurations.archives
+    sign publishing.publications.mavenJava
+}
+
+javadoc {
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.addBooleanOption('html5', true)
+    }
 }

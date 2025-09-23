@@ -1,7 +1,7 @@
 #include <jni.h>
 #include <libpostal/libpostal.h>
 
-JNIEXPORT void JNICALL Java_com_mapzen_jpostal_LibPostal_setup
+JNIEXPORT void JNICALL Java_com_matchory_packages_jpostal_LibPostal_setup
   (JNIEnv *env, jclass cls) {
 
     if (!libpostal_setup()) {
@@ -12,7 +12,7 @@ JNIEXPORT void JNICALL Java_com_mapzen_jpostal_LibPostal_setup
     }
 }
 
-JNIEXPORT void JNICALL Java_com_mapzen_jpostal_LibPostal_setupDataDir
+JNIEXPORT void JNICALL Java_com_matchory_packages_jpostal_LibPostal_setupDataDir
   (JNIEnv *env, jclass cls, jstring jDataDir) {
     const char *datadir = (*env)->GetStringUTFChars(env, jDataDir, 0);
     if (!libpostal_setup_datadir((char *)datadir)) {
@@ -23,7 +23,7 @@ JNIEXPORT void JNICALL Java_com_mapzen_jpostal_LibPostal_setupDataDir
     }
 }
 
-JNIEXPORT void JNICALL Java_com_mapzen_jpostal_LibPostal_teardown
+JNIEXPORT void JNICALL Java_com_matchory_packages_jpostal_LibPostal_teardown
   (JNIEnv *env, jclass cls) {
     libpostal_teardown();
 }

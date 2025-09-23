@@ -1,0 +1,122 @@
+name: Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build Platform-Specific JARs
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            build-tools: build-essential clang pkg-config
+          - os: ubuntu-latest
+            platform: linux-aarch64
+            build-tools: build-essential clang pkg-config gcc-aarch64-linux-gnu
+            cross-compile: true
+          - os: macos-latest
+            platform: macos-aarch64
+            build-tools: ""
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install build tools (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.build-tools }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up cross-compilation (Linux ARM64)
+        if: matrix.platform == 'linux-aarch64'
+        run: |
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "TARGET_OS=linux" >> $GITHUB_ENV
+          echo "TARGET_ARCH=aarch64" >> $GITHUB_ENV
+
+      - name: Set platform environment variables
+        run: |
+          case "${{ matrix.platform }}" in
+            linux-x86_64)
+              echo "TARGET_OS=linux" >> $GITHUB_ENV
+              echo "TARGET_ARCH=x86_64" >> $GITHUB_ENV
+              ;;
+            macos-aarch64)
+              echo "TARGET_OS=macos" >> $GITHUB_ENV
+              echo "TARGET_ARCH=aarch64" >> $GITHUB_ENV
+              ;;
+          esac
+
+      - name: Build jpostal
+        run: ./gradlew -Pversion=${{ github.event.release.tag_name }} clean build platformJar -x test
+
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jpostal-${{ matrix.platform }}
+          path: build/libs/*.jar
+
+  publish:
+    name: Publish to Maven
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          gpg-passphrase: GPG_PASSPHRASE
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare artifacts for publishing
+        run: |
+          mkdir -p build/libs
+          find artifacts -name "*.jar" -exec cp {} build/libs/ \;
+          ls -la build/libs/
+
+      - name: Publish
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/*.jar
+          generate_release_notes: true
