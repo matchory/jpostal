@@ -65,22 +65,7 @@ jobs:
           esac
 
       - name: Build jpostal
-        run: ./gradlew -Pversion=${{ github.event.release.tag_name }} clean build platformJar -x test -x signArchives
-
-      - name: Verify JAR contents
-        run: |
-          echo "=== Built JARs ==="
-          ls -la build/libs/
-          echo "=== JAR Contents ==="
-          for jar in build/libs/jpostal-*.jar; do
-            if [[ -f "$jar" && "$jar" != *"sources"* && "$jar" != *"javadoc"* ]]; then
-              echo "Contents of $jar:"
-              jar -tf "$jar" | grep -E "(native/|\.class$)" | head -10
-              echo "Native libraries:"
-              jar -tf "$jar" | grep native/ || echo "No native libraries found"
-              echo "---"
-            fi
-          done
+        run: ./gradlew -Pversion=${{ github.event.release.tag_name }} clean build platformJar -x test
 
       - name: Upload platform artifacts
         uses: actions/upload-artifact@v4
@@ -123,9 +108,7 @@ jobs:
           find artifacts -name "*.jar" -type f
 
       - name: Build for publishing
-        run: |
-          # Build the universal JAR (signing handled by Maven Central plugin)
-          ./gradlew clean build -x test
+        run: ./gradlew clean build -x test
 
       - name: Publish to Maven Central
         env:
@@ -134,14 +117,12 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ vars.SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSPHRASE }}
-        run: ./gradlew publishToMavenCentral
+        run: ./gradlew publish
 
       - name: Prepare release artifacts
         run: |
           mkdir -p release-artifacts
-          # Copy the universal JAR
           cp build/libs/*.jar release-artifacts/
-          # Copy platform-specific JARs from artifacts
           find artifacts -name "*.jar" -type f -exec cp {} release-artifacts/ \;
 
       - name: Create GitHub Release
