@@ -36,7 +36,7 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ vars.SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSPHRASE }}
         # language=bash
-        run: ./gradlew publish
+        run: ./gradlew publish -Pversion=${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
