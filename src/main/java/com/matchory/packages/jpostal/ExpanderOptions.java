@@ -177,7 +177,11 @@ public class ExpanderOptions {
 
     public static class Builder {
         static {
-            System.loadLibrary("jpostal"); // Load native library at runtime
+            try {
+                JNILoader.load(); // Load native library at runtime
+            } catch (Exception e) {
+                throw new UnsatisfiedLinkError("Failed to load libpostal: %s".formatted(e.getMessage()));
+            }
         }
 
         private String[] languages;
@@ -208,7 +212,7 @@ public class ExpanderOptions {
             setDefaultOptions();
         }
 
-        public Builder languages(String[] languages) { 
+        public Builder languages(String[] languages) {
             this.languages = languages;
             return this;
         }
@@ -218,92 +222,92 @@ public class ExpanderOptions {
             return this;
         }
 
-        public Builder latinAscii (boolean latinAscii) {
+        public Builder latinAscii(boolean latinAscii) {
             this.latinAscii = latinAscii;
             return this;
         }
 
-        public Builder transliterate (boolean transliterate) {
+        public Builder transliterate(boolean transliterate) {
             this.transliterate = transliterate;
             return this;
         }
 
-        public Builder stripAccents (boolean stripAccents) {
+        public Builder stripAccents(boolean stripAccents) {
             this.stripAccents = stripAccents;
             return this;
         }
 
-        public Builder decompose (boolean decompose) {
+        public Builder decompose(boolean decompose) {
             this.decompose = decompose;
             return this;
         }
 
-        public Builder lowercase (boolean lowercase) {
+        public Builder lowercase(boolean lowercase) {
             this.lowercase = lowercase;
             return this;
         }
 
-        public Builder trimString (boolean trimString) {
+        public Builder trimString(boolean trimString) {
             this.trimString = trimString;
             return this;
         }
 
-        public Builder dropParentheticals (boolean dropParentheticals) {
+        public Builder dropParentheticals(boolean dropParentheticals) {
             this.dropParentheticals = dropParentheticals;
             return this;
         }
 
-        public Builder replaceNumericHyphens (boolean replaceNumericHyphens) {
+        public Builder replaceNumericHyphens(boolean replaceNumericHyphens) {
             this.replaceNumericHyphens = replaceNumericHyphens;
             return this;
         }
 
-        public Builder deleteNumericHyphens (boolean deleteNumericHyphens) {
+        public Builder deleteNumericHyphens(boolean deleteNumericHyphens) {
             this.deleteNumericHyphens = deleteNumericHyphens;
             return this;
         }
 
-        public Builder splitAlphaFromNumeric (boolean splitAlphaFromNumeric) {
+        public Builder splitAlphaFromNumeric(boolean splitAlphaFromNumeric) {
             this.splitAlphaFromNumeric = splitAlphaFromNumeric;
             return this;
         }
 
-        public Builder replaceWordHyphens (boolean replaceWordHyphens) {
+        public Builder replaceWordHyphens(boolean replaceWordHyphens) {
             this.replaceWordHyphens = replaceWordHyphens;
             return this;
         }
 
-        public Builder deleteWordHyphens (boolean deleteWordHyphens) {
+        public Builder deleteWordHyphens(boolean deleteWordHyphens) {
             this.deleteWordHyphens = deleteWordHyphens;
             return this;
         }
 
-        public Builder deleteFinalPeriods (boolean deleteFinalPeriods) {
+        public Builder deleteFinalPeriods(boolean deleteFinalPeriods) {
             this.deleteFinalPeriods = deleteFinalPeriods;
             return this;
         }
 
-        public Builder deleteAcronymPeriods (boolean deleteAcronymPeriods) {
+        public Builder deleteAcronymPeriods(boolean deleteAcronymPeriods) {
             this.deleteAcronymPeriods = deleteAcronymPeriods;
             return this;
         }
 
-        public Builder dropEnglishPossessives (boolean dropEnglishPossessives) {
+        public Builder dropEnglishPossessives(boolean dropEnglishPossessives) {
             this.dropEnglishPossessives = dropEnglishPossessives;
             return this;
         }
 
-        public Builder deleteApostrophes (boolean deleteApostrophes) {
+        public Builder deleteApostrophes(boolean deleteApostrophes) {
             this.deleteApostrophes = deleteApostrophes;
             return this;
         }
 
-        public Builder expandNumex (boolean expandNumex) {
+        public Builder expandNumex(boolean expandNumex) {
             this.expandNumex = expandNumex;
             return this;
         }
 
-        public Builder romanNumerals (boolean romanNumerals) {
+        public Builder romanNumerals(boolean romanNumerals) {
             this.romanNumerals = romanNumerals;
             return this;
         }
@@ -336,6 +340,5 @@ public class ExpanderOptions {
         deleteApostrophes = builder.deleteApostrophes;
         expandNumex = builder.expandNumex;
         romanNumerals = builder.romanNumerals;
-    } 
-
+    }
 }

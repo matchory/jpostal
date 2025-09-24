@@ -11,21 +11,9 @@ plugins {
 group = 'com.matchory.packages'
 version = getProperty("version").toString().replaceFirst("^v", "") ?: '0.0.0'
 
-// Create a function to detect platform for consumers
-ext.detectPlatform = {
-    def os = System.getProperty("os.name").toLowerCase()
-    def arch = System.getProperty("os.arch").toLowerCase()
-
-    def osName = os.contains("mac") ? "macos" : "linux"
-    def archName = arch.contains("aarch64") || arch.contains("arm") ? "aarch64" : "x86_64"
-
-    return "${osName}-${archName}"
-}
-
 repositories {
     mavenCentral()
 }
-
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -80,44 +68,12 @@ model {
                     cCompiler.args '-I', "${jvmHome}/include/linux"
                     cCompiler.args '-D_FILE_OFFSET_BITS=64'
 
-                    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
-                    def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+                    // Use current build platform architecture for local builds
+                    def buildArch = System.getProperty("os.arch").toLowerCase()
+                    def archFolder = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
+                    def libPath = "${projectDir}/libs/libpostal/linux/${archFolder}"
 
-                    // Debug: Print compiler and library information
-                    println "Linux build debug info:"
-                    println "  TARGET_ARCH: ${System.getenv("TARGET_ARCH")}"
-                    println "  CC: ${System.getenv("CC")}"
-                    println "  Architecture folder: ${archFolder}"
-                    println "  Library path: ${libPath}"
-                    println "  Library exists: ${file(libPath).exists()}"
-
-                    if (file(libPath).exists()) {
-                        def libFiles = file(libPath).listFiles()
-                        println "  Library files: ${libFiles}"
-                        libFiles?.each { f ->
-                            if (f.name.endsWith('.so')) {
-                                try {
-                                    def fileOutput = "file ${f.absolutePath}".execute().text
-                                    println "  ${f.name}: ${fileOutput.trim()}"
-                                } catch (Exception e) {
-                                    println "  ${f.name}: Could not determine file type"
-                                }
-                            }
-                        }
-                    }
-
-                    // Configure cross-compilation toolchain if environment variables are set
-                    if (System.getenv("CC")) {
-                        cCompiler.executable = System.getenv("CC")
-                        println "Using cross-compiler: ${System.getenv("CC")}"
-
-                        // Also configure the linker to use the cross-compilation toolchain
-                        // For GCC cross-compilation, the linker should be the same as the compiler
-                        linker.executable = System.getenv("CC")
-                        println "Using compiler as linker: ${System.getenv("CC")}"
-                    }
-
-                    linker.args '-L', "${projectDir}/libs/libpostal/linux/${archFolder}"
+                    linker.args '-L', libPath
                 } else if (targetPlatform.operatingSystem.windows) {
                     cCompiler.args "-I${jvmHome}/include/win32"
                 } else if (targetPlatform.operatingSystem.freeBSD) {
@@ -130,91 +86,27 @@ model {
 }
 
 tasks.processResources {
-    dependsOn 'jpostalSharedLibrary'
+    // Only build JNI bindings if explicitly requested via gradle property
+    if (project.hasProperty("buildNative") && project.property("buildNative") == "true") {
+        dependsOn 'jpostalSharedLibrary'
 
-    // Detect current platform (allow override via environment variables for CI)
-    def currentOs = System.getenv("TARGET_OS") ?: System.getProperty("os.name").toLowerCase()
-    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
-
-    def osFolder = currentOs.contains("mac") ? "macos" : "linux"
-    def archFolder = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
-
-    // Include JNI bindings built by Gradle (simplified path structure)
-    // Check if we're cross-compiling (target platform differs from build platform)
-    def buildOs = System.getProperty("os.name").toLowerCase()
-    def buildArch = System.getProperty("os.arch").toLowerCase()
-
-    // In CI, environment variables are used for JAR naming, not actual cross-compilation
-    // Only consider it cross-compilation if explicitly building for a different platform
-    def actualTargetOs = currentOs.contains("mac") ? "macos" : "linux"
-    def actualBuildOs = buildOs.contains("mac") ? "macos" : "linux"
-    def actualTargetArch = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
-    def actualBuildArch = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
-
-    // Only consider it cross-compilation if actually targeting different OS
-    // Architecture differences on same OS can be handled by cross-compilation toolchain
-    def isCrossCompiling = (actualTargetOs != actualBuildOs)
-
-    if (!isCrossCompiling && file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
-        from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
-            include '*.so', '*.dylib', '*.dll'
-            into("native")
-            rename { filename ->
-                if (filename.startsWith("libjpostal")) {
-                    return System.mapLibraryName("jpostal")
-                }
-                return filename
-            }
-        }
-    } else if (isCrossCompiling) {
-        // For cross-compilation, we need pre-built JNI bindings
-        // This would require pre-built JNI libraries for each target platform
-        logger.warn("Cross-compiling detected. JNI bindings must be pre-built for target platform: ${osFolder}-${archFolder}")
-
-        // Look for pre-built JNI bindings in a specific directory
-        def prebuiltJniPath = "${projectDir}/libs/jni/${osFolder}/${archFolder}"
-        if (file(prebuiltJniPath).exists()) {
-            from(prebuiltJniPath) {
+        // Include freshly built JNI bindings
+        if (file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
+            from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
                 include '*.so', '*.dylib', '*.dll'
                 into("native")
+                rename { filename ->
+                    if (filename.startsWith("libjpostal")) {
+                        return System.mapLibraryName("jpostal")
+                    }
+                    return filename
+                }
             }
         }
     }
 
-    // Include pre-built libpostal native library for current platform only
-    from("${projectDir}/libs/libpostal/${osFolder}/${archFolder}") {
-        include '*.so', '*.dylib'
-        into("native")
-    }
-}
-
-
-classes.dependsOn 'jpostalSharedLibrary'
-
-// Ensure JAR includes native libraries
-// Create platform-specific JAR (for CI builds)
-tasks.register('platformJar', Jar) {
-    dependsOn processResources
-    duplicatesStrategy = DuplicatesStrategy.WARN
-    from sourceSets.main.output
-
-    // Add platform classifier to JAR name (allow override via environment variables for CI)
-    def currentOs = System.getenv("TARGET_OS") ?: System.getProperty("os.name").toLowerCase()
-    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
-
-    def osName = currentOs.contains("mac") ? "macos" : "linux"
-    def archName = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
-
-    archiveClassifier = "${osName}-${archName}"
-}
-
-// Create universal JAR with all platforms (default for users)
-jar {
-    dependsOn 'jpostalSharedLibrary'
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from sourceSets.main.output
-
-    // Include all pre-built native libraries with platform-specific paths
+    // Always include all pre-built native libraries for universal JAR
+    // Include all libpostal libraries
     from("${projectDir}/libs/libpostal/linux/x86_64") {
         include '*.so'
         into("native/linux/x86_64")
@@ -230,58 +122,60 @@ jar {
         into("native/macos/aarch64")
     }
 
-    // Include JNI bindings for current platform (will be built on each platform in CI)
-    def buildOs = System.getProperty("os.name").toLowerCase()
-    def buildArch = System.getProperty("os.arch").toLowerCase()
-    def buildOsFolder = buildOs.contains("mac") ? "macos" : "linux"
-    def buildArchFolder = buildArch.contains("aarch64") || buildArch.contains("arm") ? "aarch64" : "x86_64"
-
-    if (file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").exists()) {
-        from("${rootProject.layout.buildDirectory}/libs/jpostal/shared") {
-            include '*.so', '*.dylib', '*.dll'
-            into("native/${buildOsFolder}/${buildArchFolder}")
-            rename { filename ->
-                if (filename.startsWith("libjpostal")) {
-                    return System.mapLibraryName("jpostal")
-                }
-                return filename
-            }
-        }
+    // Include all pre-built JNI bindings
+    from("${projectDir}/libs/jni/linux/x86_64") {
+        include '*.so'
+        into("native/linux/x86_64")
     }
 
-    // Also include any pre-built JNI bindings from libs/jni/
-    fileTree("${projectDir}/libs/jni").visit { FileVisitDetails details ->
-        if (!details.isDirectory() && (details.name.endsWith('.so') || details.name.endsWith('.dylib'))) {
-            def pathParts = details.relativePath.segments
-            if (pathParts.length >= 3) { // e.g., ["linux", "x86_64", "libjpostal.so"]
-                def targetOs = pathParts[0]
-                def targetArch = pathParts[1]
-                from(details.file.parent) {
-                    include details.name
-                    into("native/${targetOs}/${targetArch}")
-                }
-            }
-        }
+    from("${projectDir}/libs/jni/linux/aarch64") {
+        include '*.so'
+        into("native/linux/aarch64")
+    }
+
+    from("${projectDir}/libs/jni/macos/aarch64") {
+        include '*.dylib'
+        into("native/macos/aarch64")
     }
 }
 
-application {
-    applicationDefaultJvmArgs = ["-Djava.library.path=" + file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").absolutePath]
+
+// Only build JNI bindings if explicitly requested
+if (project.hasProperty("buildNative") && project.property("buildNative") == "true") {
+    classes.dependsOn 'jpostalSharedLibrary'
+}
+
+// Ensure JAR includes native libraries
+// Legacy platform-specific JAR task (kept for compatibility but not used in CI)
+tasks.register('platformJar', Jar) {
+    dependsOn processResources
+    duplicatesStrategy = DuplicatesStrategy.WARN
+    from sourceSets.main.output
+
+    // Add platform classifier to JAR name
+    def currentOs = System.getenv("TARGET_OS") ?: System.getProperty("os.name").toLowerCase()
+    def currentArch = System.getenv("TARGET_ARCH") ?: System.getProperty("os.arch").toLowerCase()
+
+    def osName = currentOs.contains("mac") ? "macos" : "linux"
+    def archName = currentArch.contains("aarch64") || currentArch.contains("arm") ? "aarch64" : "x86_64"
+
+    archiveClassifier = "${osName}-${archName}"
+}
+
+// Universal JAR with all platforms (default build)
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from sourceSets.main.output
 }
 
 dependencies {
     testImplementation 'junit:junit:4.+'
 }
 
-tasks.withType(Test).configureEach {
-    systemProperty "java.library.path", file("${rootProject.layout.buildDirectory}/libs/jpostal/shared").absolutePath
-}
-
 mavenPublishing {
     coordinates("com.matchory.packages", "jpostal", getProperty("version").toString().replaceFirst("^v", ""))
     publishToMavenCentral()
 
-    // Configure signing - try in-memory first, fall back to file-based
     if (project.hasProperty("signingInMemoryKey") || project.hasProperty("signing.keyId")) {
         signAllPublications()
     }
@@ -314,15 +208,6 @@ mavenPublishing {
         }
     }
 }
-
-//signing {
-//    required {
-//        gradle.taskGraph.hasTask("publish") &&
-//                (project.hasProperty("signing.keyId") || System.getenv("GPG_PRIVATE_KEY") != null)
-//    }
-//    sign configurations.archives
-//    sign publishing.publications.mavenJava
-//}
 
 javadoc {
     if (JavaVersion.current().isJava9Compatible()) {

@@ -12,6 +12,7 @@ This library automatically detects your platform and loads the correct native li
 ### Maven/Gradle Usage (Recommended)
 
 **Maven:**
+
 ```xml
 <dependency>
     <groupId>com.matchory.packages</groupId>
@@ -21,11 +22,13 @@ This library automatically detects your platform and loads the correct native li
 ```
 
 **Gradle:**
+
 ```gradle
 implementation 'com.matchory.packages:jpostal:1.0.0'
 ```
 
 The universal JAR includes native libraries for all supported platforms:
+
 - Linux x86_64 and ARM64 (aarch64)
 - macOS Apple Silicon (aarch64)
 
@@ -34,6 +37,7 @@ The universal JAR includes native libraries for all supported platforms:
 For smaller deployments, platform-specific JARs are also available:
 
 **Maven:**
+
 ```xml
 <dependency>
     <groupId>com.matchory.packages</groupId>
@@ -44,6 +48,7 @@ For smaller deployments, platform-specific JARs are also available:
 ```
 
 **Gradle:**
+
 ```gradle
 implementation 'com.matchory.packages:jpostal:1.0.0:linux-x86_64' // or your target platform
 ```
@@ -86,96 +91,31 @@ AddressExpander e = AddressExpander.getInstanceDataDir("/some/path");
 AddressParser p = AddressParser.getInstanceDataDir("/some/path");
 ```
 
-Building Platform-Specific JARs
---------------------------------
+Build Process
+-------------
 
-This project uses a matrix build system to create platform-specific JARs. Each JAR contains:
+The jpostal project uses a simplified build process with pre-built native bindings for all supported platforms. This eliminates cross-compilation issues and makes CI builds faster and more reliable.
 
-1. **Pre-built libpostal native libraries** for the target platform (from `libs/libpostal/`)
-2. **JNI bindings** built by Gradle for the target platform
+### Supported Platforms
 
-### Local Development
+- **Linux x86_64** - Intel/AMD 64-bit
+- **Linux ARM64** - ARM 64-bit (aarch64)
+- **macOS ARM64** - Apple Silicon
 
-For local development on your current platform:
+### Compiling JNI extensions
+To compile the JNI portion of jpostal, run the following command:
+
 ```bash
-./gradlew clean build
+./build-native.sh
 ```
 
-### Cross-Platform Building
-
-To build for a specific platform (useful in CI):
-```bash
-TARGET_OS=linux TARGET_ARCH=x86_64 ./gradlew clean jar -x test
-TARGET_OS=linux TARGET_ARCH=aarch64 ./gradlew clean jar -x test
-TARGET_OS=macos TARGET_ARCH=aarch64 ./gradlew clean jar -x test
-```
-
-### GitHub Actions Matrix Build
-
-The project includes a GitHub Actions workflow that automatically builds JARs for all supported platforms when you create a release tag.
-
-Building libpostal (Development)
--------------------------------
-
-For development purposes, you may want to build libpostal from source. Make sure you have the following prerequisites:
-
-**On Ubuntu/Debian**
-```
-sudo apt-get install curl autoconf automake libtool pkg-config
-```
-
-**On CentOS/RHEL**
-```
-sudo yum install curl autoconf automake libtool pkgconfig
-```
-
-**On Mac OSX**
-```
-brew install curl autoconf automake libtool pkg-config
-```
-
-**Installing libpostal**
-
-```shell
-git clone https://github.com/openvenues/libpostal
-cd libpostal
-./bootstrap.sh
-./configure --datadir=[...some dir with a few GB of space...]
-
-make
-sudo make install
-
-# On Linux it's probably a good idea to run
-sudo ldconfig
-```
-
-Note: libpostal >= v0.3.3 is required to use this binding.
-
-
-Building jpostal
-----------------
-
-Only one command is needed:
-
-```
-./gradlew assemble
-```
-
-This will leverage gradle's NativeLibrarySpec support to build for the JNI/C portion of the library and installs the resulting shared libraries in the expected location for java.library.path
-
-Usage in a Java project
------------------------
-
-The JNI portion of jpostal builds shared object files (.so on Linux, .jniLib on Mac) that need to be on java.library.path.
-After running ```gradle assemble``` the .so/.jniLib files can be found under ```./libs/jpostal/shared``` in the build dir. For running the tests, we set java.library.path explicitly [here](https://github.com/Qualytics/jpostal/blob/master/build.gradle#L63).
-
+This will build the shared object files (.so on Linux, .dylib on Mac) for all supported platforms and update the library distribution files.
 
 Compatibility
 -------------
 
--  Building jpostal is known to work on Linux and Mac OSX (including Mac silicon).
--  Requires JDK 16 or later. Make sure JAVA_HOME points to JDK 16+.
-
+- Building jpostal is known to work on Linux and Mac OSX (including Mac silicon).
+- Requires JDK 16 or later. Make sure JAVA_HOME points to JDK 16+.
 
 Tests
 -----

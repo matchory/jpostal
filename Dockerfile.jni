@@ -1,0 +1,18 @@
+FROM eclipse-temurin:21-jdk
+
+# Install build tools
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy the project files
+COPY . .
+
+# Build the JNI bindings
+RUN ./gradlew clean jpostalSharedLibrary
+
+# The output will be in build/libs/jpostal/shared/
