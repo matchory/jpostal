@@ -26,7 +26,7 @@ jobs:
 
       - name: Build
         # language=bash
-        run: ./gradlew -Pversion=${{ github.event.release.tag_name }} clean build -x test
+        run: ./gradlew -Pversion=${{ github.ref_name }} clean build -x test
 
       - name: Publish to Maven Central
         env:
