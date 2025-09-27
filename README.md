@@ -1,13 +1,12 @@
 jpostal
--------
-
+=======
 [![Build Status](https://travis-ci.org/openvenues/jpostal.svg?branch=master)](https://travis-ci.org/openvenues/jpostal)
 
 These are the Java/JNI bindings to [libpostal](https://github.com/openvenues/libpostal), a fast, multilingual NLP library (written in C) for parsing/normalizing physical addresses around the world.
 
-## Automatic Platform Detection
-
-This library automatically detects your platform and loads the correct native libraries at runtime. Simply add the dependency - no platform specification required!
+Automatic Platform Detection
+----------------------------
+This library automatically detects your platform and loads the correct native libraries at runtime.
 
 ### Maven/Gradle Usage (Recommended)
 
@@ -17,14 +16,14 @@ This library automatically detects your platform and loads the correct native li
 <dependency>
     <groupId>com.matchory.packages</groupId>
     <artifactId>jpostal</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
 **Gradle:**
 
 ```gradle
-implementation 'com.matchory.packages:jpostal:1.0.0'
+implementation 'com.matchory.packages:jpostal:2.0.0'
 ```
 
 The universal JAR includes native libraries for all supported platforms:
@@ -32,30 +31,8 @@ The universal JAR includes native libraries for all supported platforms:
 - Linux x86_64 and ARM64 (aarch64)
 - macOS Apple Silicon (aarch64)
 
-### Platform-Specific JARs (Optional)
-
-For smaller deployments, platform-specific JARs are also available:
-
-**Maven:**
-
-```xml
-<dependency>
-    <groupId>com.matchory.packages</groupId>
-    <artifactId>jpostal</artifactId>
-    <version>1.0.0</version>
-    <classifier>linux-x86_64</classifier> <!-- or linux-aarch64, macos-aarch64 -->
-</dependency>
-```
-
-**Gradle:**
-
-```gradle
-implementation 'com.matchory.packages:jpostal:1.0.0:linux-x86_64' // or your target platform
-```
-
 Usage
 -----
-
 To expand address strings into normalized forms suitable for geocoder queries:
 
 ```java
@@ -93,7 +70,6 @@ AddressParser p = AddressParser.getInstanceDataDir("/some/path");
 
 Build Process
 -------------
-
 The jpostal project uses a simplified build process with pre-built native bindings for all supported platforms. This eliminates cross-compilation issues and makes CI builds faster and more reliable.
 
 ### Supported Platforms
@@ -113,13 +89,11 @@ This will build the shared object files (.so on Linux, .dylib on Mac) for all su
 
 Compatibility
 -------------
-
 - Building jpostal is known to work on Linux and Mac OSX (including Mac silicon).
-- Requires JDK 16 or later. Make sure JAVA_HOME points to JDK 16+.
+- Requires JDK 16 or later. Make sure JAVA_HOME points to JDK 21+.
 
 Tests
 -----
-
 To run the tests:
 
 ```
@@ -128,5 +102,4 @@ To run the tests:
 
 License
 -------
-
 The package is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
